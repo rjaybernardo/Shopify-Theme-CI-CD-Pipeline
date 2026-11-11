@@ -5,3 +5,4 @@ dist/
 .env.*
 !.env.example
 *.log
+theme/config/settings_data.json

@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Shopify theme delivery pipeline portfolio project",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
+    "test": "node --test",
+    "verify:bundle": "node scripts/verify-bundle.mjs",
+    "deploy": "node scripts/deploy-theme.mjs",
     "check": "shopify theme check --path theme --fail-level warning",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

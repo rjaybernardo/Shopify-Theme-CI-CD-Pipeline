@@ -8,27 +8,39 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: theme-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   quality:
     name: Theme quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run format:check
+      - run: npm test
       - run: npm run check
       - run: npm run package
-      - uses: actions/upload-artifact@v4
+      - run: npm run verify:bundle
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: theme-${{ github.sha }}
-          path: dist/theme/
+          path: dist/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
 
   staging:
     name: Deploy staging
@@ -41,24 +53,31 @@ jobs:
       group: shopify-staging
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: theme-${{ github.sha }}
-          path: dist/theme
-      - name: Deploy tested artifact
+          path: dist
+      - name: Reject stale staging deployment
         env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          test "$latest" = "$GITHUB_SHA"
+      - name: Deploy tested bundle
+        run: npm run deploy
+        env:
+          DEPLOY_ENVIRONMENT: staging
           SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
           SHOPIFY_FLAG_STORE: ${{ vars.SHOPIFY_STORE }}
           THEME_ID: ${{ vars.SHOPIFY_THEME_ID }}
-          SHOPIFY_FLAG_NO_INPUT: '1'
-        run: |
-          test -n "$SHOPIFY_CLI_THEME_TOKEN"
-          test -n "$SHOPIFY_FLAG_STORE"
-          [[ "$THEME_ID" =~ ^[0-9]+$ ]]
-          npx --no-install shopify theme push --path dist/theme --theme "$THEME_ID" --ignore config/settings_data.json --json
+          MANAGE_THEME_EDITOR_JSON: ${{ vars.MANAGE_THEME_EDITOR_JSON }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+          EXPECTED_RUN_ID: ${{ github.run_id }}

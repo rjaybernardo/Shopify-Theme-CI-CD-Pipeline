@@ -1,80 +1,101 @@
 name: Release or rollback
-run-name: Deploy ${{ inputs.commit }} to production
+run-name: Deploy CI run ${{ inputs.build_run_id }}
 on:
   workflow_dispatch:
     inputs:
-      commit:
-        description: Full 40-character main-branch commit SHA (use a previous SHA to roll back)
+      build_run_id:
+        description: Successful main-branch Theme CI run ID (use an earlier run to roll back)
         required: true
         type: string
+      confirm_theme_id:
+        description: Type the production theme ID to confirm the target
+        required: true
+        type: string
+      allow_live:
+        description: Allow updating the live theme
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: shopify-production
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   validate:
-    name: Validate release
+    name: Validate release build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      commit: ${{ steps.build.outputs.commit }}
+      artifact: ${{ steps.build.outputs.artifact }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: main
           fetch-depth: 0
-      - name: Resolve main-branch commit
-        env:
-          RELEASE_COMMIT: ${{ inputs.commit }}
-        run: |
-          [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
-          git checkout --detach "$RELEASE_COMMIT"
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run format:check
-      - run: npm run check
-      - run: npm run package
-      - uses: actions/upload-artifact@v4
+      - name: Resolve successful CI run
+        id: build
+        run: node scripts/resolve-release.mjs
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Require commit still on main
+        env:
+          RELEASE_COMMIT: ${{ steps.build.outputs.commit }}
+        run: git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-${{ inputs.commit }}
-          path: dist/theme/
-          if-no-files-found: error
+          name: ${{ steps.build.outputs.artifact }}
+          path: dist
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - run: node scripts/verify-bundle.mjs
+        env:
+          EXPECTED_COMMIT: ${{ steps.build.outputs.commit }}
+          EXPECTED_RUN_ID: ${{ inputs.build_run_id }}
 
   deploy:
-    name: Deploy approved release
+    name: Deploy approved build
     needs: validate
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: main
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-${{ inputs.commit }}
-          path: dist/theme
-      - name: Deploy release artifact
+          name: ${{ needs.validate.outputs.artifact }}
+          path: dist
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - name: Deploy original CI bundle
+        run: npm run deploy
         env:
+          DEPLOY_ENVIRONMENT: production
           SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
           SHOPIFY_FLAG_STORE: ${{ vars.SHOPIFY_STORE }}
           THEME_ID: ${{ vars.SHOPIFY_THEME_ID }}
-          SHOPIFY_FLAG_NO_INPUT: '1'
-          RELEASE_COMMIT: ${{ inputs.commit }}
-        run: |
-          test -n "$SHOPIFY_CLI_THEME_TOKEN"
-          test -n "$SHOPIFY_FLAG_STORE"
-          [[ "$THEME_ID" =~ ^[0-9]+$ ]]
-          npx --no-install shopify theme push --path dist/theme --theme "$THEME_ID" --allow-live --ignore config/settings_data.json --json
-          echo "Deployed commit $RELEASE_COMMIT to theme $THEME_ID" >> "$GITHUB_STEP_SUMMARY"
+          MANAGE_THEME_EDITOR_JSON: ${{ vars.MANAGE_THEME_EDITOR_JSON }}
+          CONFIRM_THEME_ID: ${{ inputs.confirm_theme_id }}
+          ALLOW_LIVE: ${{ inputs.allow_live }}
+          EXPECTED_COMMIT: ${{ needs.validate.outputs.commit }}
+          EXPECTED_RUN_ID: ${{ inputs.build_run_id }}
