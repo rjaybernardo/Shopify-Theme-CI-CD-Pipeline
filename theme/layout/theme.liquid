@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="{{ request.locale.iso_code }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title | escape }} — {{ shop.name | escape }}</title>
+    <link rel="canonical" href="{{ canonical_url }}">
+    {% if page_description %}
+      <meta name="description" content="{{ page_description | escape }}">
+    {% endif %}
+    {{ 'base.css' | asset_url | stylesheet_tag }}
+    {{ content_for_header }}
+  </head>
+  <body>
+    <a class="skip-link" href="#MainContent">{{ 'general.skip_to_content' | t }}</a>
+    <header class="site-header">
+      <a href="{{ routes.root_url }}">{{ shop.name | escape }}</a>
+    </header>
+    <main id="MainContent" tabindex="-1">{{ content_for_layout }}</main>
+    <footer class="site-footer">{{ 'general.footer' | t }}</footer>
+  </body>
+</html>

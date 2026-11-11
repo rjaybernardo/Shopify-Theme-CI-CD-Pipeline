@@ -1,0 +1,64 @@
+name: Theme CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Theme quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run check
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: theme-${{ github.sha }}
+          path: dist/theme/
+          if-no-files-found: error
+          retention-days: 30
+
+  staging:
+    name: Deploy staging
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_STAGING == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    concurrency:
+      group: shopify-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: theme-${{ github.sha }}
+          path: dist/theme
+      - name: Deploy tested artifact
+        env:
+          SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_FLAG_STORE: ${{ vars.SHOPIFY_STORE }}
+          THEME_ID: ${{ vars.SHOPIFY_THEME_ID }}
+          SHOPIFY_FLAG_NO_INPUT: '1'
+        run: |
+          test -n "$SHOPIFY_CLI_THEME_TOKEN"
+          test -n "$SHOPIFY_FLAG_STORE"
+          [[ "$THEME_ID" =~ ^[0-9]+$ ]]
+          npx --no-install shopify theme push --path dist/theme --theme "$THEME_ID" --ignore config/settings_data.json --json

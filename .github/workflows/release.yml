@@ -1,0 +1,80 @@
+name: Release or rollback
+run-name: Deploy ${{ inputs.commit }} to production
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full 40-character main-branch commit SHA (use a previous SHA to roll back)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shopify-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Resolve main-branch commit
+        env:
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+          git checkout --detach "$RELEASE_COMMIT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run check
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.commit }}
+          path: dist/theme/
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy approved release
+    needs: validate
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ inputs.commit }}
+          path: dist/theme
+      - name: Deploy release artifact
+        env:
+          SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_FLAG_STORE: ${{ vars.SHOPIFY_STORE }}
+          THEME_ID: ${{ vars.SHOPIFY_THEME_ID }}
+          SHOPIFY_FLAG_NO_INPUT: '1'
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: |
+          test -n "$SHOPIFY_CLI_THEME_TOKEN"
+          test -n "$SHOPIFY_FLAG_STORE"
+          [[ "$THEME_ID" =~ ^[0-9]+$ ]]
+          npx --no-install shopify theme push --path dist/theme --theme "$THEME_ID" --allow-live --ignore config/settings_data.json --json
+          echo "Deployed commit $RELEASE_COMMIT to theme $THEME_ID" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,18 @@
+{
+  "name": "shopify-theme-cicd",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shopify theme delivery pipeline portfolio project",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "check": "shopify theme check --path theme --fail-level warning",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "package": "node scripts/package-theme.mjs",
+    "dev": "shopify theme dev --path theme"
+  },
+  "devDependencies": {
+    "@shopify/cli": "4.9.4",
+    "prettier": "3.6.2"
+  }
+}

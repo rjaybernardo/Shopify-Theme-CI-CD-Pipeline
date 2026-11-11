@@ -1,0 +1,21 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #173e32;
+  background: #f5f3eb;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: inherit; }
+.site-header, .site-footer { padding: 1.5rem clamp(1.5rem, 6vw, 6rem); }
+.site-header { border-bottom: 1px solid #c9d2c6; font-weight: 700; }
+.site-header a { text-decoration: none; }
+.promo { max-width: 72rem; margin: auto; padding: clamp(4rem, 12vw, 10rem) 1.5rem; }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.8rem; }
+h1 { max-width: 15ch; font-size: clamp(2.5rem, 7vw, 5.5rem); line-height: 1.05; letter-spacing: -0.05em; }
+.promo > p { max-width: 48ch; line-height: 1.7; }
+.button { display: inline-block; margin-top: 1rem; padding: 1rem 1.5rem; color: #fff; background: #173e32; border-radius: 0.25rem; text-decoration: none; }
+.site-footer { border-top: 1px solid #c9d2c6; font-size: 0.875rem; }
+.skip-link { position: absolute; top: -10rem; left: 1rem; padding: 1rem; background: #fff; }
+.skip-link:focus { top: 1rem; }
+:focus-visible { outline: 3px solid #ac531e; outline-offset: 5px; }

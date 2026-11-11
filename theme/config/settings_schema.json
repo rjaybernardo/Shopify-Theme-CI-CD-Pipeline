@@ -1,0 +1,10 @@
+[
+  {
+    "name": "theme_info",
+    "theme_name": "Pipeline Demo",
+    "theme_version": "0.1.0",
+    "theme_author": "Shopify Theme CI/CD Portfolio",
+    "theme_documentation_url": "https://shopify.dev/docs/storefronts/themes",
+    "theme_support_url": "https://github.com"
+  }
+]
